@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>TaskLog</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F7F6F1; --surface: #FFFFFF; --border: #E2E0D8; --text: #1A1917;
+    --muted: #6B6960; --todo-bg: #FEF3C7; --todo-text: #92400E; --todo-dot: #F59E0B;
+    --done-bg: #D1FAE5; --done-text: #065F46; --done-dot: #10B981;
+    --recur-bg: #EDE9FE; --recur-text: #5B21B6; --recur-dot: #7C3AED;
+    --radius: 12px; --shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; max-width: 680px; margin: 0 auto; }
+  nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 16px; display: flex; align-items: center; height: 56px; position: sticky; top: 0; z-index: 100; }
+  .logo { font-family: 'DM Serif Display', serif; font-size: 20px; letter-spacing: -0.5px; flex: 1; color: var(--text); }
+  .nav-tabs { display: flex; gap: 2px; background: var(--bg); border-radius: 8px; padding: 3px; }
+  .nav-tab { border: none; background: none; padding: 5px 14px; border-radius: 6px; font-size: 13px; font-family: 'DM Sans', sans-serif; font-weight: 500; color: var(--muted); cursor: pointer; transition: all 0.15s; }
+  .nav-tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+  .screen { display: none; padding: 16px; }
+  .screen.active { display: block; }
+  .date-header { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; }
+  .date-nav-btn { width: 36px; height: 36px; border: 1px solid var(--border); background: var(--surface); border-radius: 8px; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text); flex-shrink: 0; }
+  .date-nav-btn:active { background: var(--bg); }
+  input[type="date"], input[type="text"], select {
+    flex: 1; border: 1px solid var(--border); background: var(--surface);
+    border-radius: 8px; padding: 8px 12px; font-family: 'DM Sans', sans-serif;
+    font-size: 15px; color: var(--text); outline: none;
+  }
+  input[type="date"]:focus, input[type="text"]:focus, select:focus { border-color: var(--text); }
+  input[type="number"] { width: 80px; border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 8px 12px; font-family: 'DM Sans', sans-serif; font-size: 15px; color: var(--text); outline: none; }
+  .entries-section { margin-bottom: 20px; }
+  .section-label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; padding-left: 2px; }
+  .entry-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 8px; display: flex; align-items: flex-start; gap: 8px; }
+  .entry-card.recur { border-left: 3px solid var(--recur-dot); }
+  .priority-badge { font-size: 11px; font-weight: 600; color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 2px 6px; flex-shrink: 0; min-width: 24px; text-align: center; margin-top: 2px; }
+  .todo .priority-badge { color: var(--todo-text); background: var(--todo-bg); border-color: var(--todo-dot); }
+  .done .priority-badge { color: var(--done-text); background: var(--done-bg); border-color: var(--done-dot); }
+  .entry-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-top: 6px; }
+  .todo .entry-dot { background: var(--todo-dot); }
+  .done .entry-dot { background: var(--done-dot); }
+  .entry-body { flex: 1; min-width: 0; }
+  .entry-text { font-size: 15px; line-height: 1.4; color: var(--text); }
+  .entry-meta { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+  .meta-chip { font-size: 11px; padding: 2px 7px; border-radius: 10px; font-weight: 500; }
+  .classify-chip { background: #F3F4F6; color: #374151; }
+  .recur-chip { background: var(--recur-bg); color: var(--recur-text); }
+  .entry-actions { display: flex; gap: 2px; flex-shrink: 0; align-items: center; }
+  .icon-btn { width: 28px; height: 28px; border: none; background: none; border-radius: 6px; cursor: pointer; font-size: 15px; color: var(--muted); display: flex; align-items: center; justify-content: center; transition: background 0.1s; }
+  .icon-btn:hover, .icon-btn:active { background: var(--bg); color: var(--text); }
+  .move-btn { font-size: 12px; color: #9CA3AF; }
+  .move-btn:hover { color: var(--text); }
+  .move-btn:disabled { opacity: 0.25; cursor: default; }
+  .move-btn:disabled:hover { background: none; color: #9CA3AF; }
+  .promote-btn { color: var(--done-dot); }
+  .delete-btn { color: #EF4444; }
+  .divider { width: 1px; height: 20px; background: var(--border); margin: 0 2px; flex-shrink: 0; }
+  .empty-state { text-align: center; padding: 20px 0 8px; color: var(--muted); font-size: 14px; }
+  .add-form { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-top: 20px; }
+  .add-form-title { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .type-toggle { display: flex; gap: 6px; margin-bottom: 10px; }
+  .type-btn { flex: 1; padding: 7px; border: 1px solid var(--border); background: var(--bg); border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; color: var(--muted); }
+  .type-btn.todo-btn.active { background: var(--todo-bg); color: var(--todo-text); border-color: var(--todo-dot); }
+  .type-btn.done-btn.active { background: var(--done-bg); color: var(--done-text); border-color: var(--done-dot); }
+  textarea { width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: 'DM Sans', sans-serif; font-size: 15px; resize: none; outline: none; color: var(--text); background: var(--bg); min-height: 72px; line-height: 1.5; }
+  textarea:focus { border-color: var(--text); background: var(--surface); }
+  .save-btn { width: 100%; margin-top: 8px; padding: 10px; background: var(--text); color: white; border: none; border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 500; cursor: pointer; transition: opacity 0.15s; }
+  .save-btn:active { opacity: 0.85; }
+  .field-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .field-row label { font-size: 13px; color: var(--muted); font-weight: 500; min-width: 70px; flex-shrink: 0; }
+  .field-row .field-input { flex: 1; position: relative; }
+  .field-row select { width: 100%; }
+  .autocomplete-list { position: absolute; top: 100%; left: 0; right: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; z-index: 50; max-height: 160px; overflow-y: auto; box-shadow: var(--shadow); }
+  .autocomplete-item { padding: 8px 12px; font-size: 14px; cursor: pointer; }
+  .autocomplete-item:hover { background: var(--bg); }
+  .recur-section { border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 10px; background: var(--bg); }
+  .recur-section-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 8px; }
+  .recur-limit-row { display: flex; gap: 8px; margin-top: 8px; }
+  .recur-limit-btn { flex: 1; padding: 6px; border: 1px solid var(--border); background: var(--surface); border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 500; cursor: pointer; color: var(--muted); transition: all 0.15s; }
+  .recur-limit-btn.active { background: var(--recur-bg); color: var(--recur-text); border-color: var(--recur-dot); }
+  .recur-limit-input { display: none; margin-top: 8px; }
+  .recur-limit-input.show { display: flex; align-items: center; gap: 8px; }
+  .recur-limit-input label { font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; align-items: flex-end; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--surface); border-radius: var(--radius) var(--radius) 0 0; padding: 20px 16px 32px; width: 100%; max-width: 680px; animation: slideUp 0.2s ease; max-height: 90vh; overflow-y: auto; }
+  @keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .modal-title { font-weight: 600; font-size: 16px; }
+  .close-btn { width: 28px; height: 28px; border: none; background: var(--bg); border-radius: 50%; font-size: 18px; cursor: pointer; color: var(--muted); display: flex; align-items: center; justify-content: center; }
+  .report-filters { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 16px; }
+  .filter-row { display: flex; gap: 8px; margin-bottom: 10px; align-items: center; }
+  .filter-row label { font-size: 13px; color: var(--muted); min-width: 40px; font-weight: 500; }
+  .filter-row input[type="date"] { flex: 1; }
+  .type-filter { display: flex; gap: 4px; flex-wrap: wrap; }
+  .filter-chip { padding: 5px 12px; border: 1px solid var(--border); border-radius: 20px; background: var(--bg); font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 500; cursor: pointer; color: var(--muted); }
+  .filter-chip.active { background: var(--text); color: white; border-color: var(--text); }
+  .run-btn { width: 100%; padding: 10px; background: var(--text); color: white; border: none; border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; }
+  .report-results { margin-top: 4px; }
+  .report-date-group { margin-bottom: 16px; }
+  .report-date-label { font-family: 'DM Serif Display', serif; font-size: 15px; color: var(--muted); margin-bottom: 6px; padding-left: 2px; }
+  .report-summary { display: flex; gap: 10px; margin-bottom: 16px; }
+  .summary-card { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; text-align: center; }
+  .summary-num { font-family: 'DM Serif Display', serif; font-size: 28px; line-height: 1; margin-bottom: 4px; }
+  .summary-lbl { font-size: 12px; color: var(--muted); }
+  .todo-num { color: var(--todo-dot); }
+  .done-num { color: var(--done-dot); }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--text); color: white; padding: 10px 20px; border-radius: 20px; font-size: 14px; font-weight: 500; z-index: 500; transition: transform 0.25s ease; white-space: nowrap; }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<nav>
+  <span class="logo">TaskLog</span>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showScreen('entry', this)">Entry</button>
+    <button class="nav-tab" onclick="showScreen('report', this)">Report</button>
+  </div>
+</nav>
+
+<div id="screen-entry" class="screen active">
+  <div class="date-header">
+    <button class="date-nav-btn" onclick="shiftDate(-1)">&#8249;</button>
+    <input type="date" id="entry-date" onchange="loadEntries()">
+    <button class="date-nav-btn" onclick="shiftDate(1)">&#8250;</button>
+  </div>
+  <div class="entries-section">
+    <div class="section-label">To Do</div>
+    <div id="todo-list"></div>
+  </div>
+  <div class="entries-section">
+    <div class="section-label">Done</div>
+    <div id="done-list"></div>
+  </div>
+  <div class="add-form">
+    <div class="add-form-title">Add entry</div>
+    <div class="type-toggle">
+      <button class="type-btn todo-btn active" onclick="setAddType('todo')">&#9899; To Do</button>
+      <button class="type-btn done-btn" onclick="setAddType('done')">&#10003; Done</button>
+    </div>
+    <textarea id="add-text" placeholder="What needs to be done?" rows="2"></textarea>
+
+    <div class="field-row" style="margin-top:10px;">
+      <label>Classify</label>
+      <div class="field-input">
+        <input type="text" id="add-classify" placeholder="e.g. Health, Garden..." autocomplete="off" oninput="showAutocomplete('add-classify','add-classify-list')">
+        <div class="autocomplete-list" id="add-classify-list" style="display:none;"></div>
+      </div>
+    </div>
+
+    <div class="recur-section">
+      <div class="recur-section-title">Recurrence</div>
+      <div class="field-row" style="margin-bottom:8px;">
+        <label>Repeats</label>
+        <select id="add-recur-rule" onchange="onAddRecurChange()">
+          <option value="">None</option>
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+          <option value="quarterly">Quarterly</option>
+          <option value="annually">Annually</option>
+          <option value="lastday">Last ___ of month</option>
+          <option value="firstday">First ___ of month</option>
+        </select>
+      </div>
+      <div id="add-recur-day-row" class="field-row" style="display:none; margin-bottom:8px;">
+        <label>Day</label>
+        <select id="add-recur-day">
+          <option value="MON">Monday</option><option value="TUE">Tuesday</option>
+          <option value="WED">Wednesday</option><option value="THU">Thursday</option>
+          <option value="FRI">Friday</option><option value="SAT">Saturday</option><option value="SUN">Sunday</option>
+        </select>
+      </div>
+      <div id="add-recur-limit" style="display:none;">
+        <div class="recur-limit-row">
+          <button class="recur-limit-btn active" id="add-limit-indefinite" onclick="setAddLimit('indefinite')">Indefinite</button>
+          <button class="recur-limit-btn" id="add-limit-count" onclick="setAddLimit('count')">Set count</button>
+          <button class="recur-limit-btn" id="add-limit-date" onclick="setAddLimit('date')">End date</button>
+        </div>
+        <div class="recur-limit-input" id="add-limit-count-row">
+          <label>Occurrences</label>
+          <input type="number" id="add-recur-count" min="1" value="10">
+        </div>
+        <div class="recur-limit-input" id="add-limit-date-row">
+          <label>End date</label>
+          <input type="date" id="add-recur-end-date" style="flex:1;">
+        </div>
+      </div>
+    </div>
+
+    <button class="save-btn" onclick="addEntry()">Add Entry</button>
+  </div>
+</div>
+
+<div id="screen-report" class="screen">
+  <div class="report-filters">
+    <div class="filter-row"><label>From</label><input type="date" id="report-from"></div>
+    <div class="filter-row"><label>To</label><input type="date" id="report-to"></div>
+    <div class="filter-row">
+      <label>Type</label>
+      <div class="type-filter">
+        <button class="filter-chip active" data-type="all" onclick="setFilter('all')">All</button>
+        <button class="filter-chip" data-type="todo" onclick="setFilter('todo')">To Do</button>
+        <button class="filter-chip" data-type="done" onclick="setFilter('done')">Done</button>
+      </div>
+    </div>
+    <button class="run-btn" onclick="runReport()">Run Report</button>
+  </div>
+  <div id="report-results" class="report-results"></div>
+</div>
+
+<!-- EDIT MODAL -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Edit Entry</span>
+      <button class="close-btn" onclick="closeModal()">&#215;</button>
+    </div>
+    <div class="type-toggle">
+      <button class="type-btn todo-btn" id="edit-todo-btn" onclick="setEditType('todo')">&#9899; To Do</button>
+      <button class="type-btn done-btn" id="edit-done-btn" onclick="setEditType('done')">&#10003; Done</button>
+    </div>
+    <div id="edit-date-row" class="field-row" style="margin-top:10px;">
+      <label>Date</label>
+      <input type="date" id="edit-date" style="flex:1;">
+    </div>
+    <textarea id="edit-text" rows="3" style="margin-top:10px;"></textarea>
+
+    <div class="field-row" style="margin-top:10px;">
+      <label>Classify</label>
+      <div class="field-input">
+        <input type="text" id="edit-classify" placeholder="e.g. Health, Garden..." autocomplete="off" oninput="showAutocomplete('edit-classify','edit-classify-list')">
+        <div class="autocomplete-list" id="edit-classify-list" style="display:none;"></div>
+      </div>
+    </div>
+
+    <div class="recur-section" style="margin-top:10px;">
+      <div class="recur-section-title">Recurrence</div>
+      <div class="field-row" style="margin-bottom:8px;">
+        <label>Repeats</label>
+        <select id="edit-recur-rule" onchange="onEditRecurChange()">
+          <option value="">None</option>
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+          <option value="quarterly">Quarterly</option>
+          <option value="annually">Annually</option>
+          <option value="lastday">Last ___ of month</option>
+          <option value="firstday">First ___ of month</option>
+        </select>
+      </div>
+      <div id="edit-recur-day-row" class="field-row" style="display:none; margin-bottom:8px;">
+        <label>Day</label>
+        <select id="edit-recur-day">
+          <option value="MON">Monday</option><option value="TUE">Tuesday</option>
+          <option value="WED">Wednesday</option><option value="THU">Thursday</option>
+          <option value="FRI">Friday</option><option value="SAT">Saturday</option><option value="SUN">Sunday</option>
+        </select>
+      </div>
+      <div id="edit-recur-limit" style="display:none;">
+        <div class="recur-limit-row">
+          <button class="recur-limit-btn active" id="edit-limit-indefinite" onclick="setEditLimit('indefinite')">Indefinite</button>
+          <button class="recur-limit-btn" id="edit-limit-count" onclick="setEditLimit('count')">Set count</button>
+          <button class="recur-limit-btn" id="edit-limit-date" onclick="setEditLimit('date')">End date</button>
+        </div>
+        <div class="recur-limit-input" id="edit-limit-count-row">
+          <label>Occurrences</label>
+          <input type="number" id="edit-recur-count" min="1" value="10">
+        </div>
+        <div class="recur-limit-input" id="edit-limit-date-row">
+          <label>End date</label>
+          <input type="date" id="edit-recur-end-date" style="flex:1;">
+        </div>
+      </div>
+    </div>
+
+    <button class="save-btn" onclick="saveEdit()" style="margin-top:8px;">Save Changes</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const API = '';
+  let addType = 'todo';
+  let editId = null;
+  let editType = 'todo';
+  let reportFilter = 'all';
+  const entryStore = {};
+  let classifyValues = [];
+  let addLimitMode = 'indefinite';
+  let editLimitMode = 'indefinite';
+
+  const today = new Date();
+  const fmt = d => d.toISOString().slice(0, 10);
+  document.getElementById('entry-date').value = fmt(today);
+  document.getElementById('report-from').value = fmt(new Date(today.getFullYear(), today.getMonth(), 1));
+  document.getElementById('report-to').value = fmt(today);
+
+  // Load classify values on startup
+  async function loadClassifyValues() {
+    const res = await fetch(API + '/api/classify');
+    classifyValues = await res.json();
+  }
+  loadClassifyValues();
+
+  function showAutocomplete(inputId, listId) {
+    const input = document.getElementById(inputId);
+    const list = document.getElementById(listId);
+    const val = input.value.trim().toLowerCase();
+    if (!val) { list.style.display = 'none'; return; }
+    const matches = classifyValues.filter(v => v.toLowerCase().startsWith(val));
+    if (!matches.length) { list.style.display = 'none'; return; }
+    list.innerHTML = matches.map(m => '<div class="autocomplete-item" onmousedown="pickClassify(\'' + inputId + '\',\'' + listId + '\',\'' + escAttr(m) + '\')">' + escHtml(m) + '</div>').join('');
+    list.style.display = 'block';
+  }
+
+  function pickClassify(inputId, listId, value) {
+    document.getElementById(inputId).value = value;
+    document.getElementById(listId).style.display = 'none';
+  }
+
+  document.addEventListener('click', function(e) {
+    ['add-classify-list','edit-classify-list'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el && !el.contains(e.target)) el.style.display = 'none';
+    });
+  });
+
+  // --- RECURRENCE HELPERS ---
+  function getRecurRule(prefix) {
+    const rule = document.getElementById(prefix + '-recur-rule').value;
+    if (!rule) return null;
+    if (rule === 'lastday' || rule === 'firstday') {
+      const day = document.getElementById(prefix + '-recur-day').value;
+      return rule + ':' + day;
+    }
+    return rule;
+  }
+
+  function getRecurLimit(prefix) {
+    const mode = prefix === 'add' ? addLimitMode : editLimitMode;
+    const endDate = mode === 'date' ? document.getElementById(prefix + '-recur-end-date').value.replace(/-/g,'') : null;
+    const count = mode === 'count' ? parseInt(document.getElementById(prefix + '-recur-count').value) : null;
+    return { recur_end_date: endDate || null, recur_remaining: count || null };
+  }
+
+  function onAddRecurChange() {
+    const rule = document.getElementById('add-recur-rule').value;
+    document.getElementById('add-recur-day-row').style.display = (rule === 'lastday' || rule === 'firstday') ? 'flex' : 'none';
+    document.getElementById('add-recur-limit').style.display = rule ? 'block' : 'none';
+  }
+
+  function onEditRecurChange() {
+    const rule = document.getElementById('edit-recur-rule').value;
+    document.getElementById('edit-recur-day-row').style.display = (rule === 'lastday' || rule === 'firstday') ? 'flex' : 'none';
+    document.getElementById('edit-recur-limit').style.display = rule ? 'block' : 'none';
+  }
+
+  function setAddLimit(mode) {
+    addLimitMode = mode;
+    ['indefinite','count','date'].forEach(m => document.getElementById('add-limit-' + m).classList.toggle('active', m === mode));
+    document.getElementById('add-limit-count-row').classList.toggle('show', mode === 'count');
+    document.getElementById('add-limit-date-row').classList.toggle('show', mode === 'date');
+  }
+
+  function setEditLimit(mode) {
+    editLimitMode = mode;
+    ['indefinite','count','date'].forEach(m => document.getElementById('edit-limit-' + m).classList.toggle('active', m === mode));
+    document.getElementById('edit-limit-count-row').classList.toggle('show', mode === 'count');
+    document.getElementById('edit-limit-date-row').classList.toggle('show', mode === 'date');
+  }
+
+  function setRecurFieldsFromEntry(prefix, e) {
+    const rule = e.recur_rule || '';
+    let baseRule = rule, day = 'MON';
+    if (rule.includes(':')) { var parts = rule.split(':'); baseRule = parts[0]; day = parts[1]; }
+    document.getElementById(prefix + '-recur-rule').value = baseRule;
+    document.getElementById(prefix + '-recur-day').value = day;
+    document.getElementById(prefix + '-recur-day-row').style.display = (baseRule === 'lastday' || baseRule === 'firstday') ? 'flex' : 'none';
+    document.getElementById(prefix + '-recur-limit').style.display = baseRule ? 'block' : 'none';
+    if (e.recur_end_date) {
+      if (prefix === 'add') setAddLimit('date'); else setEditLimit('date');
+      document.getElementById(prefix + '-recur-end-date').value = e.recur_end_date.slice(0,4)+'-'+e.recur_end_date.slice(4,6)+'-'+e.recur_end_date.slice(6,8);
+    } else if (e.recur_remaining) {
+      if (prefix === 'add') setAddLimit('count'); else setEditLimit('count');
+      document.getElementById(prefix + '-recur-count').value = e.recur_remaining;
+    } else {
+      if (prefix === 'add') setAddLimit('indefinite'); else setEditLimit('indefinite');
+    }
+  }
+
+  function recurRuleLabel(rule) {
+    if (!rule) return '';
+    const map = { daily:'Daily', weekly:'Weekly', monthly:'Monthly', quarterly:'Quarterly', annually:'Annually' };
+    if (map[rule]) return map[rule];
+    const dayNames = { MON:'Mon', TUE:'Tue', WED:'Wed', THU:'Thu', FRI:'Fri', SAT:'Sat', SUN:'Sun' };
+    if (rule.startsWith('lastday:')) return 'Last ' + (dayNames[rule.split(':')[1]] || '') + ' of month';
+    if (rule.startsWith('firstday:')) return 'First ' + (dayNames[rule.split(':')[1]] || '') + ' of month';
+    return rule;
+  }
+
+  // --- SCREEN & DATE NAV ---
+  function showScreen(name, btn) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('screen-' + name).classList.add('active');
+    btn.classList.add('active');
+  }
+
+  function shiftDate(days) {
+    const el = document.getElementById('entry-date');
+    const d = new Date(el.value + 'T12:00:00');
+    d.setDate(d.getDate() + days);
+    el.value = fmt(d);
+    loadEntries();
+  }
+
+  function setAddType(t) {
+    addType = t;
+    document.querySelectorAll('.add-form .type-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('.add-form .' + t + '-btn').classList.add('active');
+    document.getElementById('add-text').placeholder = t === 'todo' ? 'What needs to be done?' : 'What did you accomplish?';
+  }
+
+  // --- LOAD & RENDER ---
+  async function loadEntries() {
+    const date = document.getElementById('entry-date').value.replace(/-/g, '');
+    const res = await fetch(API + '/api/entries?date=' + date);
+    const entries = await res.json();
+    entries.forEach(e => { entryStore[e.id] = e; });
+    renderList('todo-list', entries.filter(e => e.type === 'todo').sort((a,b) => a.priority - b.priority), true);
+    renderList('done-list', entries.filter(e => e.type === 'done').sort((a,b) => a.priority - b.priority), false);
+  }
+
+  function renderList(containerId, entries, showControls) {
+    const el = document.getElementById(containerId);
+    const type = showControls ? 'todo' : 'done';
+    if (!entries.length) {
+      el.innerHTML = '<div class="empty-state">No ' + (type === 'todo' ? 'to-do' : 'done') + ' entries</div>';
+      return;
+    }
+    el.innerHTML = entries.map(function(e, idx) {
+      var isFirst = idx === 0, isLast = idx === entries.length - 1;
+      var upBtn = '<button class="icon-btn move-btn" onclick="moveEntry(' + e.id + ',\'up\')" title="Move up"' + (isFirst ? ' disabled' : '') + '>&#9650;</button>';
+      var downBtn = '<button class="icon-btn move-btn" onclick="moveEntry(' + e.id + ',\'down\')" title="Move down"' + (isLast ? ' disabled' : '') + '>&#9660;</button>';
+      var chips = '';
+      if (e.classify) chips += '<span class="meta-chip classify-chip">' + escHtml(e.classify) + '</span>';
+      if (e.recur_rule) chips += '<span class="meta-chip recur-chip">&#8635; ' + recurRuleLabel(e.recur_rule) + '</span>';
+      return [
+        '<div class="entry-card ' + e.type + (e.recur_rule ? ' recur' : '') + '">',
+        '<div class="priority-badge">' + e.priority + '</div>',
+        '<div class="entry-dot"></div>',
+        '<div class="entry-body">',
+        '<div class="entry-text">' + escHtml(e.text) + '</div>',
+        chips ? '<div class="entry-meta">' + chips + '</div>' : '',
+        '</div>',
+        '<div class="entry-actions">',
+        showControls ? (upBtn + downBtn + '<div class="divider"></div>') : '',
+        showControls ? '<button class="icon-btn promote-btn" onclick="promoteEntry(' + e.id + ')" title="Mark as Done">&#10003;</button>' : '',
+        '<button class="icon-btn" onclick="openEdit(' + e.id + ')" title="Edit">&#9998;</button>',
+        '<button class="icon-btn delete-btn" onclick="deleteEntry(' + e.id + ')" title="Delete">&#10005;</button>',
+        '</div></div>'
+      ].join('');
+    }).join('');
+  }
+
+  function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function escAttr(s) { return String(s).replace(/'/g,"\\'"); }
+
+  // --- ADD ENTRY ---
+  async function addEntry() {
+    const text = document.getElementById('add-text').value.trim();
+    if (!text) return;
+    const date = document.getElementById('entry-date').value.replace(/-/g, '');
+    const classify = document.getElementById('add-classify').value.trim();
+    const recur_rule = getRecurRule('add');
+    const limit = recur_rule ? getRecurLimit('add') : {};
+    const res = await fetch(API + '/api/entries', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(Object.assign({ date, type: addType, text, classify, recur_rule }, limit))
+    });
+    if (res.ok) {
+      document.getElementById('add-text').value = '';
+      document.getElementById('add-classify').value = '';
+      document.getElementById('add-recur-rule').value = '';
+      onAddRecurChange();
+      await loadClassifyValues();
+      showToast('Entry added');
+      loadEntries();
+    } else {
+      showToast('Error adding entry');
+    }
+  }
+
+  // --- DELETE ---
+  async function deleteEntry(id) {
+    const e = entryStore[id];
+    let scope = 'single';
+    if (e && e.recur_id) {
+      const choice = confirm('This is a recurring entry.\n\nOK = Delete this occurrence only\nCancel = Delete ALL occurrences in this series');
+      scope = choice ? 'single' : 'all';
+      if (!choice && !confirm('Are you sure you want to delete ALL occurrences?')) return;
+    } else {
+      if (!confirm('Delete this entry?')) return;
+    }
+    await fetch(API + '/api/entries/' + id + '?scope=' + scope, { method: 'DELETE' });
+    showToast(scope === 'all' ? 'All occurrences deleted' : 'Deleted');
+    loadEntries();
+  }
+
+  // --- PROMOTE ---
+  async function promoteEntry(id) {
+    const e = entryStore[id];
+    if (!e) return;
+    const res = await fetch(API + '/api/entries/' + id, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ type: 'done', text: e.text, classify: e.classify || '', date: e.date, recur_rule: e.recur_rule, recur_end_date: e.recur_end_date, recur_remaining: e.recur_remaining })
+    });
+    const data = await res.json();
+    if (data.next_entry) showToast('Done ✓  — next occurrence created');
+    else showToast('Moved to Done');
+    loadEntries();
+  }
+
+  // --- MOVE ---
+  async function moveEntry(id, direction) {
+    const res = await fetch(API + '/api/entries/' + id + '/move', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ direction })
+    });
+    if (res.ok) {
+      const entries = await res.json();
+      entries.forEach(e => { entryStore[e.id] = e; });
+      renderList('todo-list', entries.filter(e => e.type === 'todo').sort((a,b) => a.priority - b.priority), true);
+      renderList('done-list', entries.filter(e => e.type === 'done').sort((a,b) => a.priority - b.priority), false);
+    }
+  }
+
+  // --- EDIT MODAL ---
+  function openEdit(id) {
+    const e = entryStore[id];
+    if (!e) return;
+    editId = id;
+    setEditType(e.type);
+    document.getElementById('edit-text').value = e.text;
+    document.getElementById('edit-classify').value = e.classify || '';
+    var d = e.date;
+    document.getElementById('edit-date').value = d.slice(0,4) + '-' + d.slice(4,6) + '-' + d.slice(6,8);
+    document.getElementById('edit-date-row').style.display = e.type === 'todo' ? 'flex' : 'none';
+    setRecurFieldsFromEntry('edit', e);
+    document.getElementById('edit-modal').classList.add('open');
+  }
+
+  function closeModal() {
+    document.getElementById('edit-modal').classList.remove('open');
+    editId = null;
+  }
+
+  function setEditType(t) {
+    editType = t;
+    document.getElementById('edit-todo-btn').classList.toggle('active', t === 'todo');
+    document.getElementById('edit-done-btn').classList.toggle('active', t === 'done');
+    document.getElementById('edit-date-row').style.display = t === 'todo' ? 'flex' : 'none';
+  }
+
+  async function saveEdit() {
+    const text = document.getElementById('edit-text').value.trim();
+    if (!text) return;
+    const dateVal = document.getElementById('edit-date').value.replace(/-/g, '');
+    const classify = document.getElementById('edit-classify').value.trim();
+    const recur_rule = getRecurRule('edit');
+    const limit = recur_rule ? getRecurLimit('edit') : { recur_end_date: null, recur_remaining: null };
+    await fetch(API + '/api/entries/' + editId, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(Object.assign({ type: editType, text, classify, date: dateVal, recur_rule }, limit))
+    });
+    await loadClassifyValues();
+    closeModal();
+    showToast('Saved');
+    loadEntries();
+  }
+
+  // --- REPORT ---
+  function setFilter(f) {
+    reportFilter = f;
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.toggle('active', c.dataset.type === f));
+  }
+
+  async function runReport() {
+    const from = document.getElementById('report-from').value.replace(/-/g, '');
+    const to = document.getElementById('report-to').value.replace(/-/g, '');
+    if (!from || !to) { showToast('Select date range'); return; }
+    let url = API + '/api/entries?from=' + from + '&to=' + to;
+    if (reportFilter !== 'all') url += '&type=' + reportFilter;
+    const res = await fetch(url);
+    renderReport(await res.json());
+  }
+
+  function renderReport(entries) {
+    const el = document.getElementById('report-results');
+    if (!entries.length) { el.innerHTML = '<div class="empty-state">No entries found.</div>'; return; }
+    const todos = entries.filter(e => e.type === 'todo').length;
+    const dones = entries.filter(e => e.type === 'done').length;
+    const byDate = {};
+    entries.forEach(e => { (byDate[e.date] = byDate[e.date] || []).push(e); });
+    const formatDate = function(d) {
+      return new Date(d.slice(0,4)+'-'+d.slice(4,6)+'-'+d.slice(6,8)+'T12:00:00').toLocaleDateString('en-GB', {weekday:'short',day:'numeric',month:'short',year:'numeric'});
+    };
+    var html = '<div class="report-summary">'
+      + '<div class="summary-card"><div class="summary-num">' + entries.length + '</div><div class="summary-lbl">Total</div></div>'
+      + '<div class="summary-card"><div class="summary-num todo-num">' + todos + '</div><div class="summary-lbl">To Do</div></div>'
+      + '<div class="summary-card"><div class="summary-num done-num">' + dones + '</div><div class="summary-lbl">Done</div></div>'
+      + '</div>';
+    Object.keys(byDate).sort().forEach(function(date) {
+      html += '<div class="report-date-group"><div class="report-date-label">' + formatDate(date) + '</div>';
+      byDate[date].forEach(function(e) {
+        var chips = '';
+        if (e.classify) chips += '<span class="meta-chip classify-chip">' + escHtml(e.classify) + '</span>';
+        if (e.recur_rule) chips += '<span class="meta-chip recur-chip">&#8635; ' + recurRuleLabel(e.recur_rule) + '</span>';
+        html += '<div class="entry-card ' + e.type + (e.recur_rule ? ' recur' : '') + '">'
+          + '<div class="priority-badge">' + e.priority + '</div>'
+          + '<div class="entry-dot"></div>'
+          + '<div class="entry-body"><div class="entry-text">' + escHtml(e.text) + '</div>'
+          + (chips ? '<div class="entry-meta">' + chips + '</div>' : '')
+          + '</div></div>';
+      });
+      html += '</div>';
+    });
+    el.innerHTML = html;
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(function() { t.classList.remove('show'); }, 2500);
+  }
+
+  document.getElementById('edit-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+
+  loadEntries();
+</script>
+</body>
+</html>

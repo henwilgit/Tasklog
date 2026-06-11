@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# SQLite data and backups (personal data, not source)
+*.db
+backups/
+
+# Packaged bundles
+*.zip

@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>TaskLog</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F7F6F1;
+    --surface: #FFFFFF;
+    --border: #E2E0D8;
+    --text: #1A1917;
+    --muted: #6B6960;
+    --todo-bg: #FEF3C7;
+    --todo-text: #92400E;
+    --todo-dot: #F59E0B;
+    --done-bg: #D1FAE5;
+    --done-text: #065F46;
+    --done-dot: #10B981;
+    --accent: #1A1917;
+    --radius: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    max-width: 680px;
+    margin: 0 auto;
+  }
+
+  /* NAV */
+  nav {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    height: 56px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    gap: 0;
+  }
+  .logo {
+    font-family: 'DM Serif Display', serif;
+    font-size: 20px;
+    letter-spacing: -0.5px;
+    flex: 1;
+    color: var(--text);
+  }
+  .nav-tabs {
+    display: flex;
+    gap: 2px;
+    background: var(--bg);
+    border-radius: 8px;
+    padding: 3px;
+  }
+  .nav-tab {
+    border: none;
+    background: none;
+    padding: 5px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 500;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .nav-tab.active {
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: var(--shadow);
+  }
+
+  /* SCREENS */
+  .screen { display: none; padding: 16px; }
+  .screen.active { display: block; }
+
+  /* DATE PICKER */
+  .date-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .date-nav-btn {
+    width: 36px; height: 36px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: 8px;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text);
+    flex-shrink: 0;
+  }
+  .date-nav-btn:active { background: var(--bg); }
+  input[type="date"] {
+    flex: 1;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    color: var(--text);
+    outline: none;
+  }
+  input[type="date"]:focus { border-color: var(--text); }
+
+  /* ENTRIES */
+  .entries-section { margin-bottom: 20px; }
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+    padding-left: 2px;
+  }
+  .entry-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .entry-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-top: 6px;
+    flex-shrink: 0;
+  }
+  .todo .entry-dot { background: var(--todo-dot); }
+  .done .entry-dot { background: var(--done-dot); }
+  .entry-text {
+    flex: 1;
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--text);
+  }
+  .entry-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .icon-btn {
+    width: 30px; height: 30px;
+    border: none;
+    background: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    color: var(--muted);
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.1s;
+  }
+  .icon-btn:hover, .icon-btn:active { background: var(--bg); color: var(--text); }
+  .promote-btn { color: var(--done-dot); }
+  .delete-btn { color: #EF4444; }
+
+  .empty-state {
+    text-align: center;
+    padding: 24px 0 8px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  /* ADD FORM */
+  .add-form {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-top: 20px;
+  }
+  .add-form-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .type-toggle {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .type-btn {
+    flex: 1;
+    padding: 7px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    border-radius: 8px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    color: var(--muted);
+  }
+  .type-btn.todo-btn.active { background: var(--todo-bg); color: var(--todo-text); border-color: var(--todo-dot); }
+  .type-btn.done-btn.active { background: var(--done-bg); color: var(--done-text); border-color: var(--done-dot); }
+  textarea {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    resize: none;
+    outline: none;
+    color: var(--text);
+    background: var(--bg);
+    min-height: 72px;
+    line-height: 1.5;
+  }
+  textarea:focus { border-color: var(--text); background: var(--surface); }
+  .save-btn {
+    width: 100%;
+    margin-top: 8px;
+    padding: 10px;
+    background: var(--text);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .save-btn:active { opacity: 0.85; }
+  .save-btn:disabled { opacity: 0.4; cursor: default; }
+
+  /* EDIT MODAL */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 200;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border-radius: var(--radius) var(--radius) 0 0;
+    padding: 20px 16px 32px;
+    width: 100%;
+    max-width: 680px;
+    animation: slideUp 0.2s ease;
+  }
+  @keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .modal-title { font-weight: 600; font-size: 16px; }
+  .close-btn {
+    width: 28px; height: 28px;
+    border: none;
+    background: var(--bg);
+    border-radius: 50%;
+    font-size: 18px;
+    cursor: pointer;
+    color: var(--muted);
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* REPORT SCREEN */
+  .report-filters {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-bottom: 16px;
+  }
+  .filter-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+    align-items: center;
+  }
+  .filter-row label {
+    font-size: 13px;
+    color: var(--muted);
+    min-width: 40px;
+    font-weight: 500;
+  }
+  .filter-row input[type="date"] { flex: 1; }
+  .type-filter {
+    display: flex;
+    gap: 4px;
+  }
+  .filter-chip {
+    padding: 5px 12px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: var(--bg);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    color: var(--muted);
+  }
+  .filter-chip.active { background: var(--text); color: white; border-color: var(--text); }
+  .run-btn {
+    width: 100%;
+    padding: 10px;
+    background: var(--text);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .report-results { margin-top: 4px; }
+  .report-date-group { margin-bottom: 16px; }
+  .report-date-label {
+    font-family: 'DM Serif Display', serif;
+    font-size: 15px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    padding-left: 2px;
+  }
+  .report-summary {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .summary-card {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    text-align: center;
+  }
+  .summary-num {
+    font-family: 'DM Serif Display', serif;
+    font-size: 28px;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .summary-lbl { font-size: 12px; color: var(--muted); }
+  .todo-num { color: var(--todo-dot); }
+  .done-num { color: var(--done-dot); }
+
+  /* TOAST */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--text);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 500;
+    transition: transform 0.25s ease;
+    white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<nav>
+  <span class="logo">TaskLog</span>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showScreen('entry')">Entry</button>
+    <button class="nav-tab" onclick="showScreen('report')">Report</button>
+  </div>
+</nav>
+
+<!-- ENTRY SCREEN -->
+<div id="screen-entry" class="screen active">
+  <div class="date-header">
+    <button class="date-nav-btn" onclick="shiftDate(-1)">‹</button>
+    <input type="date" id="entry-date" onchange="loadEntries()">
+    <button class="date-nav-btn" onclick="shiftDate(1)">›</button>
+  </div>
+
+  <div class="entries-section">
+    <div class="section-label">To Do</div>
+    <div id="todo-list"></div>
+  </div>
+
+  <div class="entries-section">
+    <div class="section-label">Done</div>
+    <div id="done-list"></div>
+  </div>
+
+  <div class="add-form">
+    <div class="add-form-title">Add entry</div>
+    <div class="type-toggle">
+      <button class="type-btn todo-btn active" onclick="setAddType('todo')">⬤ To Do</button>
+      <button class="type-btn done-btn" onclick="setAddType('done')">✓ Done</button>
+    </div>
+    <textarea id="add-text" placeholder="What needs to be done?" rows="3"></textarea>
+    <button class="save-btn" onclick="addEntry()">Add Entry</button>
+  </div>
+</div>
+
+<!-- REPORT SCREEN -->
+<div id="screen-report" class="screen">
+  <div class="report-filters">
+    <div class="filter-row">
+      <label>From</label>
+      <input type="date" id="report-from">
+    </div>
+    <div class="filter-row">
+      <label>To</label>
+      <input type="date" id="report-to">
+    </div>
+    <div class="filter-row">
+      <label>Type</label>
+      <div class="type-filter">
+        <button class="filter-chip active" data-type="all" onclick="setFilter('all')">All</button>
+        <button class="filter-chip" data-type="todo" onclick="setFilter('todo')">To Do</button>
+        <button class="filter-chip" data-type="done" onclick="setFilter('done')">Done</button>
+      </div>
+    </div>
+    <button class="run-btn" onclick="runReport()">Run Report</button>
+  </div>
+  <div id="report-results" class="report-results"></div>
+</div>
+
+<!-- EDIT MODAL -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Edit Entry</span>
+      <button class="close-btn" onclick="closeModal()">×</button>
+    </div>
+    <div class="type-toggle">
+      <button class="type-btn todo-btn" id="edit-todo-btn" onclick="setEditType('todo')">⬤ To Do</button>
+      <button class="type-btn done-btn" id="edit-done-btn" onclick="setEditType('done')">✓ Done</button>
+    </div>
+    <textarea id="edit-text" rows="4" style="margin-top:10px;"></textarea>
+    <button class="save-btn" onclick="saveEdit()" style="margin-top:8px;">Save Changes</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const API = '';
+  let addType = 'todo';
+  let editId = null;
+  let editType = 'todo';
+  let reportFilter = 'all';
+  const entryStore = {};
+  const entryStore = {};
+
+  // Init dates
+  const today = new Date();
+  const fmt = d => d.toISOString().slice(0,10);
+  document.getElementById('entry-date').value = fmt(today);
+  document.getElementById('report-from').value = fmt(new Date(today.getFullYear(), today.getMonth(), 1));
+  document.getElementById('report-to').value = fmt(today);
+
+  function showScreen(name) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('screen-' + name).classList.add('active');
+    event.target.classList.add('active');
+  }
+
+  function shiftDate(days) {
+    const el = document.getElementById('entry-date');
+    const d = new Date(el.value + 'T12:00:00');
+    d.setDate(d.getDate() + days);
+    el.value = fmt(d);
+    loadEntries();
+  }
+
+  function setAddType(t) {
+    addType = t;
+    document.querySelectorAll('.add-form .type-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector(`.add-form .${t}-btn`).classList.add('active');
+    document.getElementById('add-text').placeholder = t === 'todo' ? 'What needs to be done?' : 'What did you accomplish?';
+  }
+
+  async function loadEntries() {
+    const date = document.getElementById('entry-date').value.replace(/-/g,'');
+    const res = await fetch(`${API}/api/entries?date=${date}`);
+    const entries = await res.json();
+    renderList('todo-list', entries.filter(e => e.type === 'todo'), 'todo');
+    renderList('done-list', entries.filter(e => e.type === 'done'), 'done');
+  }
+
+  function renderList(containerId, entries, type) {
+    const el = document.getElementById(containerId);
+    if (!entries.length) {
+      el.innerHTML = `<div class="empty-state">No ${type === 'todo' ? 'to-do' : 'done'} entries</div>`;
+      return;
+    }
+    entries.forEach(e => { entryStore[e.id] = e; });
+    el.innerHTML = entries.map(e => `
+      <div class="entry-card ${e.type}">
+        <div class="entry-dot"></div>
+        <div class="entry-text">${escHtml(e.text)}</div>
+        <div class="entry-actions">
+          ${e.type === 'todo' ? `<button class="icon-btn promote-btn" onclick="promoteEntry(${e.id})" title="Mark as Done">✓</button>` : ''}
+          <button class="icon-btn" onclick="openEdit(${e.id})" title="Edit">✎</button>
+          <button class="icon-btn delete-btn" onclick="deleteEntry(${e.id})" title="Delete">✕</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  async function addEntry() {
+    const text = document.getElementById('add-text').value.trim();
+    if (!text) return;
+    const date = document.getElementById('entry-date').value.replace(/-/g,'');
+    await fetch(`${API}/api/entries`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ date, type: addType, text })
+    });
+    document.getElementById('add-text').value = '';
+    showToast('Entry added');
+    loadEntries();
+  }
+
+  async function deleteEntry(id) {
+    if (!confirm('Delete this entry?')) return;
+    await fetch(`${API}/api/entries/${id}`, { method: 'DELETE' });
+    showToast('Deleted');
+    loadEntries();
+  }
+
+  async function promoteEntry(id) {
+    const e = entryStore[id];
+    if (!e) return;
+    await fetch(`${API}/api/entries/${id}`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ type: 'done', text: e.text })
+    });
+    showToast('Moved to Done ✓');
+    loadEntries();
+  }
+
+  function openEdit(id) {
+    const e = entryStore[id];
+    if (!e) return;
+    editId = id;
+    setEditType(e.type);
+    document.getElementById('edit-text').value = e.text;
+    document.getElementById('edit-modal').classList.add('open');
+  }
+
+  function closeModal() {
+    document.getElementById('edit-modal').classList.remove('open');
+    editId = null;
+  }
+
+  function setEditType(t) {
+    editType = t;
+    document.getElementById('edit-todo-btn').classList.toggle('active', t === 'todo');
+    document.getElementById('edit-done-btn').classList.toggle('active', t === 'done');
+  }
+
+  async function saveEdit() {
+    const text = document.getElementById('edit-text').value.trim();
+    if (!text) return;
+    await fetch(`${API}/api/entries/${editId}`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ type: editType, text })
+    });
+    closeModal();
+    showToast('Saved');
+    loadEntries();
+  }
+
+  function setFilter(f) {
+    reportFilter = f;
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.toggle('active', c.dataset.type === f));
+  }
+
+  async function runReport() {
+    const from = document.getElementById('report-from').value.replace(/-/g,'');
+    const to = document.getElementById('report-to').value.replace(/-/g,'');
+    if (!from || !to) { showToast('Select date range'); return; }
+    let url = `${API}/api/entries?from=${from}&to=${to}`;
+    if (reportFilter !== 'all') url += `&type=${reportFilter}`;
+    const res = await fetch(url);
+    const entries = await res.json();
+    renderReport(entries);
+  }
+
+  function renderReport(entries) {
+    const el = document.getElementById('report-results');
+    if (!entries.length) {
+      el.innerHTML = '<div class="empty-state">No entries found for this range.</div>';
+      return;
+    }
+    const todos = entries.filter(e => e.type === 'todo').length;
+    const dones = entries.filter(e => e.type === 'done').length;
+
+    // Group by date
+    const byDate = {};
+    entries.forEach(e => { (byDate[e.date] = byDate[e.date] || []).push(e); });
+
+    const formatDate = d => {
+      const y = d.slice(0,4), m = d.slice(4,6), day = d.slice(6,8);
+      return new Date(`${y}-${m}-${day}T12:00:00`).toLocaleDateString('en-GB', {weekday:'short', day:'numeric', month:'short', year:'numeric'});
+    };
+
+    let html = `
+      <div class="report-summary">
+        <div class="summary-card"><div class="summary-num">${entries.length}</div><div class="summary-lbl">Total</div></div>
+        <div class="summary-card"><div class="summary-num todo-num">${todos}</div><div class="summary-lbl">To Do</div></div>
+        <div class="summary-card"><div class="summary-num done-num">${dones}</div><div class="summary-lbl">Done</div></div>
+      </div>
+    `;
+
+    Object.keys(byDate).sort().forEach(date => {
+      html += `<div class="report-date-group"><div class="report-date-label">${formatDate(date)}</div>`;
+      byDate[date].forEach(e => {
+        html += `
+          <div class="entry-card ${e.type}">
+            <div class="entry-dot"></div>
+            <div class="entry-text">${escHtml(e.text)}</div>
+          </div>`;
+      });
+      html += '</div>';
+    });
+
+    el.innerHTML = html;
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2200);
+  }
+
+  // Promote fix: get text from DOM properly
+  async function promoteEntry(id) {
+    const card = document.querySelector(`.entry-card .icon-btn.promote-btn[onclick*="${id}"]`)?.closest('.entry-card');
+    const text = card ? card.querySelector('.entry-text').textContent : '';
+    await fetch(`${API}/api/entries/${id}`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ type: 'done', text })
+    });
+    showToast('Moved to Done ✓');
+    loadEntries();
+  }
+
+  // Close modal on overlay click
+  document.getElementById('edit-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+
+  loadEntries();
+</script>
+</body>
+</html>

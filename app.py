@@ -1,0 +1,342 @@
+from flask import Flask, request, jsonify, send_from_directory
+import sqlite3
+import os
+import shutil
+from datetime import datetime, date, timedelta, timezone
+import calendar
+
+app = Flask(__name__, static_folder='static')
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, 'tasklog.db')
+BACKUP_DIR = os.path.join(BASE_DIR, 'backups')
+app.config['DATABASE'] = DB_PATH
+
+
+def get_db():
+    conn = sqlite3.connect(app.config['DATABASE'])
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db():
+    with get_db() as conn:
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT NOT NULL,
+                type TEXT NOT NULL CHECK(type IN ('todo', 'done')),
+                priority INTEGER NOT NULL DEFAULT 0,
+                text TEXT NOT NULL,
+                classify TEXT NOT NULL DEFAULT '',
+                recur_id TEXT,
+                recur_rule TEXT,
+                recur_end_date TEXT,
+                recur_remaining INTEGER,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        ''')
+        # Add new columns if upgrading
+        for col, defn in [
+            ('priority', 'INTEGER NOT NULL DEFAULT 0'),
+            ('classify', "TEXT NOT NULL DEFAULT ''"),
+            ('recur_id', 'TEXT'),
+            ('recur_rule', 'TEXT'),
+            ('recur_end_date', 'TEXT'),
+            ('recur_remaining', 'INTEGER'),
+        ]:
+            try:
+                conn.execute(f'ALTER TABLE entries ADD COLUMN {col} {defn}')
+            except:
+                pass
+
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS classify_values (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                value TEXT UNIQUE NOT NULL
+            )
+        ''')
+        conn.commit()
+
+
+def daily_backup():
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    today = datetime.now().strftime('%Y%m%d')
+    backup_path = os.path.join(BACKUP_DIR, f'tasklog_{today}.db')
+    if not os.path.exists(backup_path):
+        shutil.copy2(app.config['DATABASE'], backup_path)
+        backups = sorted(os.listdir(BACKUP_DIR))
+        for old in backups[:-30]:
+            os.remove(os.path.join(BACKUP_DIR, old))
+        print(f"📦  Backup saved: backups/tasklog_{today}.db")
+
+
+def next_priority(conn, date_str, entry_type):
+    row = conn.execute(
+        'SELECT MAX(priority) as mp FROM entries WHERE date = ? AND type = ?',
+        (date_str, entry_type)
+    ).fetchone()
+    return (row['mp'] or 0) + 1
+
+
+def parse_date(s):
+    """Parse CCYYMMDD string to date object."""
+    return date(int(s[:4]), int(s[4:6]), int(s[6:8]))
+
+
+def fmt_date(d):
+    """Format date object to CCYYMMDD string."""
+    return d.strftime('%Y%m%d')
+
+
+def next_occurrence(rule, from_date):
+    """Calculate next occurrence date given a recurrence rule and a base date."""
+    d = parse_date(from_date)
+
+    if rule == 'daily':
+        return fmt_date(d + timedelta(days=1))
+    elif rule == 'weekly':
+        return fmt_date(d + timedelta(weeks=1))
+    elif rule == 'monthly':
+        # Same day next month
+        month = d.month + 1 if d.month < 12 else 1
+        year = d.year if d.month < 12 else d.year + 1
+        day = min(d.day, calendar.monthrange(year, month)[1])
+        return fmt_date(date(year, month, day))
+    elif rule == 'quarterly':
+        month = d.month + 3
+        year = d.year + (month - 1) // 12
+        month = ((month - 1) % 12) + 1
+        day = min(d.day, calendar.monthrange(year, month)[1])
+        return fmt_date(date(year, month, day))
+    elif rule == 'annually':
+        year = d.year + 1
+        day = min(d.day, calendar.monthrange(year, d.month)[1])
+        return fmt_date(date(year, d.month, day))
+    elif rule and rule.startswith('lastday:'):
+        # lastday:TUE  = last Tuesday of month
+        weekday_map = {'MON':0,'TUE':1,'WED':2,'THU':3,'FRI':4,'SAT':5,'SUN':6}
+        parts = rule.split(':')
+        weekday = weekday_map.get(parts[1].upper(), 0)
+        # Move to next month
+        month = d.month + 1 if d.month < 12 else 1
+        year = d.year if d.month < 12 else d.year + 1
+        # Find last weekday in that month
+        last_day = calendar.monthrange(year, month)[1]
+        for day in range(last_day, last_day - 7, -1):
+            if date(year, month, day).weekday() == weekday:
+                return fmt_date(date(year, month, day))
+    elif rule and rule.startswith('firstday:'):
+        weekday_map = {'MON':0,'TUE':1,'WED':2,'THU':3,'FRI':4,'SAT':5,'SUN':6}
+        parts = rule.split(':')
+        weekday = weekday_map.get(parts[1].upper(), 0)
+        month = d.month + 1 if d.month < 12 else 1
+        year = d.year if d.month < 12 else d.year + 1
+        for day in range(1, 8):
+            if date(year, month, day).weekday() == weekday:
+                return fmt_date(date(year, month, day))
+
+    return None
+
+
+def save_classify(conn, value):
+    if value and value.strip():
+        try:
+            conn.execute('INSERT OR IGNORE INTO classify_values (value) VALUES (?)', (value.strip(),))
+        except:
+            pass
+
+
+@app.route('/')
+def index():
+    return send_from_directory('static', 'index.html')
+
+
+@app.route('/api/classify', methods=['GET'])
+def get_classify_values():
+    with get_db() as conn:
+        rows = conn.execute('SELECT value FROM classify_values ORDER BY value ASC').fetchall()
+        return jsonify([r['value'] for r in rows])
+
+
+@app.route('/api/entries', methods=['GET'])
+def get_entries():
+    date_str = request.args.get('date')
+    date_from = request.args.get('from')
+    date_to = request.args.get('to')
+    entry_type = request.args.get('type')
+
+    with get_db() as conn:
+        if date_str:
+            rows = conn.execute(
+                'SELECT * FROM entries WHERE date = ? ORDER BY type, priority ASC',
+                (date_str,)
+            ).fetchall()
+        elif date_from and date_to:
+            query = 'SELECT * FROM entries WHERE date >= ? AND date <= ?'
+            params = [date_from, date_to]
+            if entry_type in ('todo', 'done'):
+                query += ' AND type = ?'
+                params.append(entry_type)
+            query += ' ORDER BY date ASC, type, priority ASC'
+            rows = conn.execute(query, params).fetchall()
+        else:
+            return jsonify({'error': 'Provide date or from/to params'}), 400
+        return jsonify([dict(r) for r in rows])
+
+
+@app.route('/api/entries', methods=['POST'])
+def create_entry():
+    data = request.json
+    now = datetime.now(timezone.utc).isoformat()
+    with get_db() as conn:
+        p = next_priority(conn, data['date'], data['type'])
+        recur_id = data.get('recur_id')
+        recur_rule = data.get('recur_rule') or None
+        recur_end_date = data.get('recur_end_date') or None
+        recur_remaining = data.get('recur_remaining')
+        if recur_remaining is not None:
+            recur_remaining = int(recur_remaining)
+        classify = data.get('classify', '')
+        save_classify(conn, classify)
+
+        # Generate recur_id for new recurring series
+        if recur_rule and not recur_id:
+            import uuid
+            recur_id = str(uuid.uuid4())
+
+        cur = conn.execute(
+            '''INSERT INTO entries
+               (date, type, priority, text, classify, recur_id, recur_rule, recur_end_date, recur_remaining, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (data['date'], data['type'], p, data['text'], classify,
+             recur_id, recur_rule, recur_end_date, recur_remaining, now, now)
+        )
+        conn.commit()
+        row = conn.execute('SELECT * FROM entries WHERE id = ?', (cur.lastrowid,)).fetchone()
+        return jsonify(dict(row)), 201
+
+
+@app.route('/api/entries/<int:entry_id>', methods=['PUT'])
+def update_entry(entry_id):
+    data = request.json
+    now = datetime.now(timezone.utc).isoformat()
+    with get_db() as conn:
+        existing = conn.execute('SELECT * FROM entries WHERE id = ?', (entry_id,)).fetchone()
+        if not existing:
+            return jsonify({'error': 'Not found'}), 404
+
+        new_type = data['type']
+        old_type = existing['type']
+        new_date = data.get('date', existing['date'])
+        old_date = existing['date']
+        classify = data.get('classify', existing['classify'] or '')
+        save_classify(conn, classify)
+
+        recur_rule = data.get('recur_rule', existing['recur_rule'])
+        recur_end_date = data.get('recur_end_date', existing['recur_end_date'])
+        recur_remaining = data.get('recur_remaining', existing['recur_remaining'])
+
+        if new_type != old_type or new_date != old_date:
+            new_priority = next_priority(conn, new_date, new_type)
+        else:
+            new_priority = existing['priority']
+
+        conn.execute(
+            '''UPDATE entries SET date=?, type=?, text=?, classify=?, priority=?,
+               recur_rule=?, recur_end_date=?, recur_remaining=?, updated_at=? WHERE id=?''',
+            (new_date, new_type, data['text'], classify, new_priority,
+             recur_rule, recur_end_date, recur_remaining, now, entry_id)
+        )
+
+        # If promoting todo->done and entry is recurring, create next occurrence
+        next_entry = None
+        if old_type == 'todo' and new_type == 'done' and existing['recur_rule']:
+            next_date = next_occurrence(existing['recur_rule'], old_date)
+            can_create = False
+            if next_date:
+                # Check end date
+                if existing['recur_end_date']:
+                    if next_date <= existing['recur_end_date']:
+                        can_create = True
+                elif existing['recur_remaining'] is not None:
+                    if existing['recur_remaining'] > 1:
+                        can_create = True
+                else:
+                    can_create = True
+
+            if can_create:
+                new_remaining = (existing['recur_remaining'] - 1) if existing['recur_remaining'] is not None else None
+                p2 = next_priority(conn, next_date, 'todo')
+                cur2 = conn.execute(
+                    '''INSERT INTO entries
+                       (date, type, priority, text, classify, recur_id, recur_rule, recur_end_date, recur_remaining, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                    (next_date, 'todo', p2, existing['text'], existing['classify'] or '',
+                     existing['recur_id'], existing['recur_rule'], existing['recur_end_date'],
+                     new_remaining, now, now)
+                )
+                next_row = conn.execute('SELECT * FROM entries WHERE id = ?', (cur2.lastrowid,)).fetchone()
+                next_entry = dict(next_row)
+
+        conn.commit()
+        row = conn.execute('SELECT * FROM entries WHERE id = ?', (entry_id,)).fetchone()
+        result = dict(row)
+        if next_entry:
+            result['next_entry'] = next_entry
+        return jsonify(result)
+
+
+@app.route('/api/entries/<int:entry_id>/move', methods=['POST'])
+def move_entry(entry_id):
+    direction = request.json.get('direction')
+    with get_db() as conn:
+        entry = conn.execute('SELECT * FROM entries WHERE id = ?', (entry_id,)).fetchone()
+        if not entry:
+            return jsonify({'error': 'Not found'}), 404
+        siblings = conn.execute(
+            'SELECT * FROM entries WHERE date = ? AND type = ? ORDER BY priority ASC',
+            (entry['date'], entry['type'])
+        ).fetchall()
+        ids = [r['id'] for r in siblings]
+        idx = ids.index(entry_id)
+        if direction == 'up' and idx > 0:
+            swap_id = ids[idx - 1]
+        elif direction == 'down' and idx < len(ids) - 1:
+            swap_id = ids[idx + 1]
+        else:
+            return jsonify({'message': 'Already at boundary'}), 200
+        swap = conn.execute('SELECT * FROM entries WHERE id = ?', (swap_id,)).fetchone()
+        now = datetime.now(timezone.utc).isoformat()
+        conn.execute('UPDATE entries SET priority=?, updated_at=? WHERE id=?', (swap['priority'], now, entry_id))
+        conn.execute('UPDATE entries SET priority=?, updated_at=? WHERE id=?', (entry['priority'], now, swap_id))
+        conn.commit()
+        rows = conn.execute(
+            'SELECT * FROM entries WHERE date = ? ORDER BY type, priority ASC',
+            (entry['date'],)
+        ).fetchall()
+        return jsonify([dict(r) for r in rows])
+
+
+@app.route('/api/entries/<int:entry_id>', methods=['DELETE'])
+def delete_entry(entry_id):
+    scope = request.args.get('scope', 'single')  # 'single' or 'all'
+    with get_db() as conn:
+        entry = conn.execute('SELECT * FROM entries WHERE id = ?', (entry_id,)).fetchone()
+        if not entry:
+            return jsonify({'error': 'Not found'}), 404
+        if scope == 'all' and entry['recur_id']:
+            conn.execute('DELETE FROM entries WHERE recur_id = ?', (entry['recur_id'],))
+        else:
+            conn.execute('DELETE FROM entries WHERE id = ?', (entry_id,))
+        conn.commit()
+        return jsonify({'deleted': entry_id, 'scope': scope})
+
+
+if __name__ == '__main__':
+    init_db()
+    daily_backup()
+    print("\n✅  TaskLog running at http://localhost:5000")
+    print("📱  On your phone (same Wi-Fi), go to http://<YOUR-PC-IP>:5000")
+    print("📦  Backups are saved automatically in the 'backups' folder\n")
+    app.run(host='0.0.0.0', port=5000, debug=False)
