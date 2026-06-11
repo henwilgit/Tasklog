@@ -1,7 +1,9 @@
+import base64
 from datetime import date
 
 import pytest
 
+import app as app_module
 from app import next_occurrence, parse_date, fmt_date
 
 
@@ -213,3 +215,34 @@ def test_classify_values_saved_and_listed(client):
     values = resp.get_json()
     assert set(values) >= {'Work', 'Home'}
     assert values == sorted(values)
+
+
+# ---- Basic auth ----
+
+def test_check_auth_disabled_when_env_unset(monkeypatch):
+    monkeypatch.delenv('TASKLOG_USERNAME', raising=False)
+    monkeypatch.delenv('TASKLOG_PASSWORD', raising=False)
+    assert app_module._check_auth('anyone', 'anything') is True
+
+
+def test_check_auth_validates_credentials(monkeypatch):
+    monkeypatch.setenv('TASKLOG_USERNAME', 'alice')
+    monkeypatch.setenv('TASKLOG_PASSWORD', 'secret')
+    assert app_module._check_auth('alice', 'secret') is True
+    assert app_module._check_auth('alice', 'wrong') is False
+    assert app_module._check_auth('bob', 'secret') is False
+
+
+def test_requires_auth_when_credentials_configured(client, monkeypatch):
+    monkeypatch.setenv('TASKLOG_USERNAME', 'alice')
+    monkeypatch.setenv('TASKLOG_PASSWORD', 'secret')
+    app_module.app.config['TESTING'] = False
+    try:
+        resp = client.get('/api/classify')
+        assert resp.status_code == 401
+
+        creds = base64.b64encode(b'alice:secret').decode()
+        resp = client.get('/api/classify', headers={'Authorization': f'Basic {creds}'})
+        assert resp.status_code == 200
+    finally:
+        app_module.app.config['TESTING'] = True

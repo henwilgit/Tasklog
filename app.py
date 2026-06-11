@@ -1,7 +1,8 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response
 import sqlite3
 import os
 import shutil
+import hmac
 from datetime import datetime, date, timedelta, timezone
 import calendar
 
@@ -57,6 +58,9 @@ def init_db():
             )
         ''')
         conn.commit()
+
+
+init_db()
 
 
 def daily_backup():
@@ -145,6 +149,35 @@ def save_classify(conn, value):
             conn.execute('INSERT OR IGNORE INTO classify_values (value) VALUES (?)', (value.strip(),))
         except:
             pass
+
+
+def _check_auth(username, password):
+    """Validate credentials against TASKLOG_USERNAME/TASKLOG_PASSWORD env vars.
+
+    If those env vars aren't set, auth is disabled (e.g. local home-Wi-Fi use).
+    """
+    expected_user = os.environ.get('TASKLOG_USERNAME')
+    expected_pass = os.environ.get('TASKLOG_PASSWORD')
+    if not expected_user or not expected_pass:
+        return True
+    return (
+        hmac.compare_digest(username, expected_user)
+        and hmac.compare_digest(password, expected_pass)
+    )
+
+
+@app.before_request
+def _require_auth():
+    if app.config.get('TESTING'):
+        return
+    if not os.environ.get('TASKLOG_USERNAME') or not os.environ.get('TASKLOG_PASSWORD'):
+        return
+    auth = request.authorization
+    if not auth or not _check_auth(auth.username, auth.password):
+        return Response(
+            'Authentication required', 401,
+            {'WWW-Authenticate': 'Basic realm="TaskLog"'}
+        )
 
 
 @app.route('/')
@@ -334,9 +367,9 @@ def delete_entry(entry_id):
 
 
 if __name__ == '__main__':
-    init_db()
     daily_backup()
-    print("\n✅  TaskLog running at http://localhost:5000")
-    print("📱  On your phone (same Wi-Fi), go to http://<YOUR-PC-IP>:5000")
+    port = int(os.environ.get('PORT', 5000))
+    print(f"\n✅  TaskLog running at http://localhost:{port}")
+    print(f"📱  On your phone (same Wi-Fi), go to http://<YOUR-PC-IP>:{port}")
     print("📦  Backups are saved automatically in the 'backups' folder\n")
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=port, debug=False)

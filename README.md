@@ -63,12 +63,72 @@ All data is stored in `tasklog.db` (SQLite) in the app folder. Back this file up
 
 ---
 
-## Future: Deploy to the Cloud
+## Authentication
 
-When you want access from anywhere (not just home Wi-Fi):
+By default (running locally with `python app.py`), TaskLog has **no login** — fine for a
+home Wi-Fi setup where only your devices can reach it.
 
-1. Push this folder to GitHub
-2. Deploy free on **Railway** (railway.app) or **Render** (render.com)
-3. They'll give you a URL like `https://tasklog-xyz.railway.app` — works on any device
+If you set the `TASKLOG_USERNAME` and `TASKLOG_PASSWORD` environment variables, every page
+and API endpoint requires HTTP Basic Auth with those credentials. Set both when deploying
+somewhere reachable from the internet (see below) — leave them unset for local-only use.
 
-No code changes needed.
+---
+
+## Deploying to PythonAnywhere
+
+[PythonAnywhere](https://www.pythonanywhere.com) gives a free account with **persistent
+storage** (your `tasklog.db` survives reloads/restarts) and HTTPS out of the box — good fit
+for this app since it uses SQLite on disk.
+
+### 1. Get the code onto PythonAnywhere
+
+Open a **Bash console** (Dashboard → New console → Bash) and clone your repo:
+
+```bash
+git clone <your-repo-url> tasklog
+cd tasklog
+```
+
+(No GitHub repo yet? Use the **Files** tab to upload the project as a zip and unzip it
+in the Bash console with `unzip yourfile.zip`.)
+
+### 2. Create a virtualenv and install dependencies
+
+```bash
+mkvirtualenv --python=python3.11 tasklog-venv
+pip install -r requirements.txt
+```
+
+### 3. Create the web app
+
+- Go to the **Web** tab → **Add a new web app**
+- Choose **Manual configuration** (not "Flask") → pick the same Python version as your venv
+- Set:
+  - **Source code**: `/home/<youruser>/tasklog`
+  - **Working directory**: `/home/<youruser>/tasklog`
+  - **Virtualenv**: `/home/<youruser>/.virtualenvs/tasklog-venv`
+
+### 4. Edit the WSGI configuration file
+
+Click the WSGI config file link on the **Web** tab and replace its contents with:
+
+```python
+import sys
+import os
+
+path = '/home/<youruser>/tasklog'
+if path not in sys.path:
+    sys.path.insert(0, path)
+
+# Required for any internet-facing deployment — pick your own credentials
+os.environ['TASKLOG_USERNAME'] = 'youruser'
+os.environ['TASKLOG_PASSWORD'] = 'a-strong-password'
+
+from app import app as application
+```
+
+### 5. Reload and open the app
+
+Hit the green **Reload** button on the **Web** tab, then visit
+`https://<youruser>.pythonanywhere.com` — your browser will prompt for the
+username/password you set above.
