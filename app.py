@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory, Response
+from flask import Flask, request, jsonify, send_from_directory, Response, session, redirect
 import sqlite3
 import os
 import shutil
@@ -11,6 +11,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, 'tasklog.db')
 BACKUP_DIR = os.path.join(BASE_DIR, 'backups')
 app.config['DATABASE'] = DB_PATH
+app.secret_key = os.environ.get('TASKLOG_SECRET_KEY') or os.environ.get('TASKLOG_PASSWORD', 'dev-only-not-for-production')
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
 
 def get_db():
@@ -166,6 +168,56 @@ def _check_auth(username, password):
     )
 
 
+LOGIN_PAGE = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>TaskLog</title>
+<link rel="icon" type="image/png" href="/static/apple-touch-icon.png">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<meta name="theme-color" content="#22C55E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'DM Sans', sans-serif; background: #F7F6F1; color: #1A1917;
+    min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  .card {
+    background: #FFFFFF; border: 1px solid #E2E0D8; border-radius: 12px;
+    padding: 32px 24px; width: 100%; max-width: 320px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .logo { font-family: 'DM Serif Display', serif; font-size: 24px; text-align: center; margin-bottom: 24px; }
+  label { display: block; font-size: 13px; font-weight: 500; color: #6B6960; margin-bottom: 6px; }
+  input {
+    width: 100%; border: 1px solid #E2E0D8; border-radius: 8px; padding: 10px 12px;
+    font-size: 15px; font-family: 'DM Sans', sans-serif; outline: none; margin-bottom: 16px;
+  }
+  input:focus { border-color: #1A1917; }
+  button {
+    width: 100%; border: none; border-radius: 8px; padding: 12px; font-size: 15px;
+    font-weight: 600; font-family: 'DM Sans', sans-serif; background: #22C55E; color: #FFFFFF; cursor: pointer;
+  }
+  button:active { background: #16A34A; }
+  .error { color: #B91C1C; font-size: 13px; margin-bottom: 16px; text-align: center; }
+</style>
+</head>
+<body>
+<form class="card" method="POST" action="/login">
+  <div class="logo">TaskLog</div>
+  __ERROR__
+  <label for="username">Username</label>
+  <input type="text" id="username" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" required autofocus>
+  <label for="password">Password</label>
+  <input type="password" id="password" name="password" autocomplete="current-password" required>
+  <button type="submit">Log in</button>
+</form>
+</body>
+</html>'''
+
+
 @app.before_request
 def _require_auth():
     if app.config.get('TESTING'):
@@ -176,12 +228,33 @@ def _require_auth():
         return
     if not os.environ.get('TASKLOG_USERNAME') or not os.environ.get('TASKLOG_PASSWORD'):
         return
+    if request.path == '/login':
+        return
+    if session.get('authenticated'):
+        return
     auth = request.authorization
-    if not auth or not _check_auth(auth.username, auth.password):
+    if auth and _check_auth(auth.username, auth.password):
+        return
+    if request.path.startswith('/api/'):
         return Response(
             'Authentication required', 401,
             {'WWW-Authenticate': 'Basic realm="TaskLog"'}
         )
+    return redirect('/login')
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    error_html = ''
+    if request.method == 'POST':
+        username = request.form.get('username', '')
+        password = request.form.get('password', '')
+        if _check_auth(username, password):
+            session.permanent = True
+            session['authenticated'] = True
+            return redirect('/')
+        error_html = '<div class="error">Incorrect username or password</div>'
+    return Response(LOGIN_PAGE.replace('__ERROR__', error_html), mimetype='text/html')
 
 
 @app.route('/')

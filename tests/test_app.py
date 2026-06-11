@@ -257,3 +257,52 @@ def test_static_files_accessible_without_auth(client, monkeypatch):
         assert resp.status_code == 200
     finally:
         app_module.app.config['TESTING'] = True
+
+
+def test_index_redirects_to_login_when_unauthenticated(client, monkeypatch):
+    monkeypatch.setenv('TASKLOG_USERNAME', 'alice')
+    monkeypatch.setenv('TASKLOG_PASSWORD', 'secret')
+    app_module.app.config['TESTING'] = False
+    try:
+        resp = client.get('/')
+        assert resp.status_code == 302
+        assert resp.headers['Location'] == '/login'
+
+        resp = client.get('/login')
+        assert resp.status_code == 200
+        assert b'TaskLog' in resp.data
+    finally:
+        app_module.app.config['TESTING'] = True
+
+
+def test_login_with_correct_credentials_grants_session_access(client, monkeypatch):
+    monkeypatch.setenv('TASKLOG_USERNAME', 'alice')
+    monkeypatch.setenv('TASKLOG_PASSWORD', 'secret')
+    app_module.app.config['TESTING'] = False
+    try:
+        resp = client.post('/login', data={'username': 'alice', 'password': 'secret'})
+        assert resp.status_code == 302
+        assert resp.headers['Location'] == '/'
+
+        resp = client.get('/')
+        assert resp.status_code == 200
+
+        resp = client.get('/api/classify')
+        assert resp.status_code == 200
+    finally:
+        app_module.app.config['TESTING'] = True
+
+
+def test_login_with_wrong_credentials_shows_error(client, monkeypatch):
+    monkeypatch.setenv('TASKLOG_USERNAME', 'alice')
+    monkeypatch.setenv('TASKLOG_PASSWORD', 'secret')
+    app_module.app.config['TESTING'] = False
+    try:
+        resp = client.post('/login', data={'username': 'alice', 'password': 'wrong'})
+        assert resp.status_code == 200
+        assert b'Incorrect username or password' in resp.data
+
+        resp = client.get('/')
+        assert resp.status_code == 302
+    finally:
+        app_module.app.config['TESTING'] = True

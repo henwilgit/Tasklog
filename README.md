@@ -68,9 +68,20 @@ All data is stored in `tasklog.db` (SQLite) in the app folder. Back this file up
 By default (running locally with `python app.py`), TaskLog has **no login** — fine for a
 home Wi-Fi setup where only your devices can reach it.
 
-If you set the `TASKLOG_USERNAME` and `TASKLOG_PASSWORD` environment variables, every page
-and API endpoint requires HTTP Basic Auth with those credentials. Set both when deploying
-somewhere reachable from the internet (see below) — leave them unset for local-only use.
+If you set the `TASKLOG_USERNAME` and `TASKLOG_PASSWORD` environment variables, the app
+requires a login. Set both when deploying somewhere reachable from the internet (see
+below) — leave them unset for local-only use.
+
+When auth is enabled:
+- Visiting the app in a browser redirects to a `/login` page; once you sign in, a session
+  cookie keeps you logged in (works well for "Add to Home Screen" apps, which don't support
+  the browser's native Basic Auth popup).
+- API requests can alternatively use HTTP Basic Auth with the same credentials.
+- `/static/...` files (icons, etc.) are always accessible without auth — they contain no
+  task data, and iOS needs to fetch them unauthenticated when adding the app to your home screen.
+
+Optionally set `TASKLOG_SECRET_KEY` to a random string to sign session cookies with its own
+secret — if omitted, `TASKLOG_PASSWORD` is used instead.
 
 ---
 
