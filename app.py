@@ -170,6 +170,10 @@ def _check_auth(username, password):
 def _require_auth():
     if app.config.get('TESTING'):
         return
+    if request.path.startswith('/static/'):
+        # Static assets (icons, CSS/JS) contain no task data, and iOS's
+        # "Add to Home Screen" icon fetcher doesn't send Basic Auth credentials.
+        return
     if not os.environ.get('TASKLOG_USERNAME') or not os.environ.get('TASKLOG_PASSWORD'):
         return
     auth = request.authorization

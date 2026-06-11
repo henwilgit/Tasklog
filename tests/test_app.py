@@ -246,3 +246,14 @@ def test_requires_auth_when_credentials_configured(client, monkeypatch):
         assert resp.status_code == 200
     finally:
         app_module.app.config['TESTING'] = True
+
+
+def test_static_files_accessible_without_auth(client, monkeypatch):
+    monkeypatch.setenv('TASKLOG_USERNAME', 'alice')
+    monkeypatch.setenv('TASKLOG_PASSWORD', 'secret')
+    app_module.app.config['TESTING'] = False
+    try:
+        resp = client.get('/static/apple-touch-icon.png')
+        assert resp.status_code == 200
+    finally:
+        app_module.app.config['TESTING'] = True
